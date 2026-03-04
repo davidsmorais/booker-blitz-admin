@@ -8,12 +8,13 @@ export interface ScheduledPost {
   scheduledAt: string
   status: PostStatus
   createdAt: string
+  imageDataUrl?: string
   // Twitter specific
   twitterHandle?: string
   // Reddit specific
   subreddit?: string
   redditTitle?: string
-  redditPostType?: 'text' | 'link'
+  redditPostType?: 'text' | 'link' | 'image'
   redditUrl?: string
 }
 

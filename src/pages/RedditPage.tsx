@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { format } from 'date-fns'
-import { MessageSquare, Send, Clock, Trash2, AlertCircle, Link as LinkIcon, AlignLeft } from 'lucide-react'
+import { MessageSquare, Send, Clock, Trash2, AlertCircle, Link as LinkIcon, AlignLeft, ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -17,13 +17,15 @@ import {
 } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ImageUpload } from '@/components/ImageUpload'
 import { toast } from '@/hooks/use-toast'
 import type { ScheduledPost } from '@/types'
 
+const BOOKERBLITZ_SUBREDDIT = 'r/BookerBlitz'
+
 const redditPostSchema = z.object({
-  subreddit: z.string().min(1, 'Subreddit is required'),
   title: z.string().min(1, 'Title is required').max(300, 'Title too long'),
-  postType: z.enum(['text', 'link']),
+  postType: z.enum(['text', 'link', 'image']),
   content: z.string().optional(),
   url: z.string().url('Must be a valid URL').optional().or(z.literal('')),
   scheduledAt: z.string().min(1, 'Schedule date/time is required'),
@@ -31,7 +33,7 @@ const redditPostSchema = z.object({
 
 type RedditPostFormValues = z.infer<typeof redditPostSchema>
 
-const POPULAR_SUBREDDITS = [
+const ALSO_POST_TO = [
   'r/books',
   'r/fantasy',
   'r/scifi',
@@ -44,7 +46,8 @@ const POPULAR_SUBREDDITS = [
 
 export function RedditPage() {
   const [posts, setPosts] = useState<ScheduledPost[]>([])
-  const [postType, setPostType] = useState<'text' | 'link'>('text')
+  const [postType, setPostType] = useState<'text' | 'link' | 'image'>('text')
+  const [imageDataUrl, setImageDataUrl] = useState<string | undefined>()
 
   const {
     register,
@@ -55,7 +58,6 @@ export function RedditPage() {
   } = useForm<RedditPostFormValues>({
     resolver: zodResolver(redditPostSchema),
     defaultValues: {
-      subreddit: '',
       title: '',
       postType: 'text',
       content: '',
@@ -74,15 +76,17 @@ export function RedditPage() {
       scheduledAt: data.scheduledAt,
       status: apiConfigured ? 'scheduled' : 'draft',
       createdAt: new Date().toISOString(),
-      subreddit: data.subreddit,
+      subreddit: BOOKERBLITZ_SUBREDDIT,
       redditTitle: data.title,
       redditPostType: data.postType,
       redditUrl: data.url,
+      imageDataUrl: data.postType === 'image' ? imageDataUrl : undefined,
     }
 
     setPosts((prev) => [newPost, ...prev])
     reset()
     setPostType('text')
+    setImageDataUrl(undefined)
     toast({
       title: apiConfigured ? 'Reddit post scheduled!' : 'Post saved as draft',
       description: apiConfigured
@@ -100,24 +104,26 @@ export function RedditPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-          <MessageSquare className="h-8 w-8 text-orange-500" />
+          <MessageSquare className="h-8 w-8 text-orange-400" />
           Reddit Scheduler
         </h1>
         <p className="text-muted-foreground mt-1">
-          Schedule Reddit posts for BookerBlitz.
+          Schedule posts to{' '}
+          <span className="font-medium text-orange-400">{BOOKERBLITZ_SUBREDDIT}</span>.
         </p>
       </div>
 
       {!import.meta.env.VITE_REDDIT_CLIENT_ID && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-400">
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
           <p>
             <strong>Reddit API not configured.</strong> Add{' '}
             <code className="font-mono">VITE_REDDIT_CLIENT_ID</code>,{' '}
             <code className="font-mono">VITE_REDDIT_CLIENT_SECRET</code>, and{' '}
-            <code className="font-mono">VITE_REDDIT_USERNAME</code> / <code className="font-mono">VITE_REDDIT_PASSWORD</code>{' '}
-            to your <code className="font-mono">.env</code> file. Posts will be saved
-            locally until the API is configured.
+            <code className="font-mono">VITE_REDDIT_USERNAME</code> /{' '}
+            <code className="font-mono">VITE_REDDIT_PASSWORD</code> to your{' '}
+            <code className="font-mono">.env</code> file. Posts will be saved as drafts
+            until the API is configured.
           </p>
         </div>
       )}
@@ -126,34 +132,13 @@ export function RedditPage() {
         <Card>
           <CardHeader>
             <CardTitle>Compose Post</CardTitle>
-            <CardDescription>Write and schedule a Reddit post</CardDescription>
+            <CardDescription>
+              Posting to{' '}
+              <span className="text-orange-400 font-medium">{BOOKERBLITZ_SUBREDDIT}</span>
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="subreddit">Subreddit</Label>
-                <Input
-                  id="subreddit"
-                  placeholder="r/books"
-                  {...register('subreddit')}
-                />
-                {errors.subreddit && (
-                  <p className="text-xs text-destructive">{errors.subreddit.message}</p>
-                )}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {POPULAR_SUBREDDITS.map((sub) => (
-                    <button
-                      key={sub}
-                      type="button"
-                      onClick={() => setValue('subreddit', sub)}
-                      className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                    >
-                      {sub}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <div className="space-y-2">
                 <Label htmlFor="title">Post Title</Label>
                 <Input
@@ -171,7 +156,7 @@ export function RedditPage() {
                 <Tabs
                   value={postType}
                   onValueChange={(v) => {
-                    const val = v as 'text' | 'link'
+                    const val = v as 'text' | 'link' | 'image'
                     setPostType(val)
                     setValue('postType', val)
                   }}
@@ -184,6 +169,10 @@ export function RedditPage() {
                     <TabsTrigger value="link" className="flex-1 gap-1.5">
                       <LinkIcon className="h-3.5 w-3.5" />
                       Link
+                    </TabsTrigger>
+                    <TabsTrigger value="image" className="flex-1 gap-1.5">
+                      <ImageIcon className="h-3.5 w-3.5" />
+                      Image
                     </TabsTrigger>
                   </TabsList>
                   <TabsContent value="text" className="mt-3">
@@ -204,6 +193,15 @@ export function RedditPage() {
                       <p className="text-xs text-destructive mt-1">{errors.url.message}</p>
                     )}
                   </TabsContent>
+                  <TabsContent value="image" className="mt-3 space-y-3">
+                    <ImageUpload value={imageDataUrl} onChange={setImageDataUrl} />
+                    <Textarea
+                      placeholder="Optional caption / body text..."
+                      rows={3}
+                      className="resize-none"
+                      {...register('content')}
+                    />
+                  </TabsContent>
                 </Tabs>
               </div>
 
@@ -219,6 +217,20 @@ export function RedditPage() {
                     {errors.scheduledAt.message}
                   </p>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">Also commonly posted to:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ALSO_POST_TO.map((sub) => (
+                    <span
+                      key={sub}
+                      className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
+                    >
+                      {sub}
+                    </span>
+                  ))}
+                </div>
               </div>
 
               <Button type="submit" className="w-full gap-2" disabled={isSubmitting}>
@@ -251,6 +263,13 @@ export function RedditPage() {
                     key={post.id}
                     className="group flex flex-col gap-2 rounded-lg border p-3"
                   >
+                    {post.imageDataUrl && (
+                      <img
+                        src={post.imageDataUrl}
+                        alt="Post image"
+                        className="rounded-md max-h-32 w-full object-cover"
+                      />
+                    )}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">
@@ -284,7 +303,7 @@ export function RedditPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <Badge
                         variant="secondary"
-                        className="text-xs text-orange-600 bg-orange-50 border-orange-100"
+                        className="text-xs text-orange-400 bg-orange-500/10 border-orange-500/20"
                       >
                         {post.subreddit}
                       </Badge>
@@ -292,10 +311,7 @@ export function RedditPage() {
                         <Clock className="h-3 w-3" />
                         {format(new Date(post.scheduledAt), 'PPp')}
                       </Badge>
-                      <Badge
-                        variant="outline"
-                        className="text-xs capitalize"
-                      >
+                      <Badge variant="outline" className="text-xs capitalize">
                         {post.redditPostType}
                       </Badge>
                     </div>
